@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recanto Heroico - Marketplace</title>
+    <style>
+        :root { --ml-blue: #58cb38; --btn-blue: #3483fa; --price-green: #00a650; --border: #ddd; }
+        body { font-family: 'Proxima Nova', -apple-system, sans-serif; background: #ebebeb; margin: 0; padding: 0; color: #333; }
+        
+        header { background: var(--ml-blue); padding: 15px; display: flex; flex-direction: column; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 100; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        .search-container { width: 100%; max-width: 600px; display: flex; }
+        .search-container input { flex: 1; padding: 10px; border: none; border-radius: 4px 0 0 4px; outline: none; }
+        .search-container button { background: white; border: none; padding: 10px; border-radius: 0 4px 4px 0; border-left: 1px solid #eee; cursor: pointer; }
+
+        .container { max-width: 1000px; margin: 20px auto; padding: 0 15px; }
+
+        /* Listagem Vertical */
+        .product-list { display: flex; flex-direction: column; gap: 1px; background: #fff; border-radius: 4px; }
+        .product-item { display: flex; background: white; padding: 15px; border-bottom: 1px solid #eee; cursor: pointer; }
+        .product-item img { width: 120px; height: 120px; object-fit: contain; margin-right: 15px; }
+        .product-info h2 { font-size: 16px; font-weight: 300; margin: 0 0 5px 0; }
+        .product-info .price { font-size: 20px; font-weight: 400; }
+
+        /* Página de Detalhes Responsiva */
+        .detail-view { background: white; padding: 20px; border-radius: 8px; display: none; }
+        .detail-grid { display: grid; grid-template-columns: 1fr 380px; gap: 20px; }
+
+        /* Carrossel com Setas */
+        .gallery-column { position: relative; }
+        .gallery-main { position: relative; width: 100%; text-align: center; background: #fff; }
+        .gallery-main img { width: 100%; max-height: 400px; object-fit: contain; }
+        .nav-arrow { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.1); border: none; font-size: 24px; padding: 10px; cursor: pointer; border-radius: 50%; transition: 0.3s; }
+        .nav-arrow:hover { background: rgba(0,0,0,0.2); }
+        .arrow-left { left: 5px; }
+        .arrow-right { right: 5px; }
+
+        .info-box { border: 1px solid var(--border); padding: 20px; border-radius: 8px; }
+        .tech-specs { list-style: none; padding: 0; margin: 15px 0; border-top: 1px solid #eee; padding-top: 15px; font-size: 14px; }
+        .tech-specs li { margin-bottom: 8px; }
+        .tech-specs b { width: 90px; display: inline-block; }
+
+        .btn-contact { background: var(--btn-blue); color: white; width: 100%; padding: 15px; font-size: 16px; border-radius: 6px; border: none; cursor: pointer; font-weight: bold; }
+        .desc-text { white-space: pre-wrap; color: #666; line-height: 1.6; margin-top: 15px; }
+
+        /* Admin */
+        .admin-box { background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid var(--btn-blue); display: none; }
+        input, select, textarea { width: 100%; padding: 10px; margin: 5px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+
+        /* AJUSTES PARA CELULAR */
+        @media (max-width: 768px) {
+            .detail-grid { grid-template-columns: 1fr; } /* Empilha a info embaixo da imagem */
+            .product-item img { width: 100px; height: 100px; }
+            .gallery-main img { max-height: 300px; }
+            .info-box { border: none; padding: 10px 0; }
+        }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div style="width: 100%; max-width: 1000px; display: flex; justify-content: space-between; align-items: center;">
+        <h1 style="font-size: 22px; margin: 0; cursor: pointer;" onclick="voltarParaLista()">Recanto Heroico</h1>
+        <div>
+            <span id="btnSair" class="hidden" onclick="logout()" style="cursor:pointer; font-size: 12px; margin-right:10px;">Sair</span>
+            <span id="btnLogin" onclick="gerenciarSessao()" style="background:#333; color:white; padding:5px 12px; border-radius:4px; font-size:12px; cursor:pointer;">Admin</span>
+        </div>
+    </div>
+    <div class="search-container">
+        <input type="text" id="campoBusca" placeholder="Buscar no marketplace..." oninput="buscarProdutos()">
+        <button>🔍</button>
+    </div>
+</header>
+
+<div class="container">
+    <div id="adminArea" class="admin-box">
+        <h3 id="formTitle">Novo Anúncio</h3>
+        <input type="text" id="nome" placeholder="Título">
+        <div style="display:flex; gap:10px;">
+            <input type="text" id="fabricante" placeholder="Marca">
+            <input type="text" id="modelo" placeholder="Modelo">
+        </div>
+        <div style="display:flex; gap:10px;">
+            <input type="number" id="preco" placeholder="Preço R$">
+            <input type="number" id="quantidade" placeholder="Estoque">
+            <select id="estado"><option value="Novo">Novo</option><option value="Usado">Usado</option></select>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin: 10px 0;">
+            <label style="font-size:11px">Foto 1: <input type="file" onchange="processarFoto(this, 'imagem')"></label>
+            <label style="font-size:11px">Foto 2: <input type="file" onchange="processarFoto(this, 'imagem2')"></label>
+            <input type="hidden" id="imagem"><input type="hidden" id="imagem2">
+        </div>
+        <textarea id="descricao" placeholder="Descrição detalhada..." rows="5"></textarea>
+        <button onclick="salvarProduto()" style="background:var(--btn-blue); color:white; width:100%; padding:12px; border:none; border-radius:4px;">Salvar Anúncio</button>
+        <button onclick="cancelarEdicao()" style="background:#eee; width:100%; margin-top:5px; border:none; padding:8px;">Cancelar</button>
+    </div>
+
+    <div id="listView"><div id="listaProdutos" class="product-list"></div></div>
+
+    <div id="detailView" class="detail-view">
+        <button style="border:none; background:none; color:var(--btn-blue); cursor:pointer; margin-bottom:15px;" onclick="voltarParaLista()">← Voltar</button>
+        
+        <div class="detail-grid">
+            <div class="gallery-column">
+                <div class="gallery-main">
+                    <button id="btnPrev" class="nav-arrow arrow-left">❮</button>
+                    <img id="detImg" src="" alt="">
+                    <button id="btnNext" class="nav-arrow arrow-right">❯</button>
+                </div>
+            </div>
+
+            <div class="info-column">
+                <div class="info-box">
+                    <span id="detEstado" style="color:#666; font-size:13px;"></span>
+                    <h1 id="detTitulo" style="margin: 10px 0; font-size: 22px;"></h1>
+                    <div id="detPreco" style="font-size: 30px; margin-bottom: 15px;"></div>
+
+                    <ul class="tech-specs">
+                        <li><b>Marca:</b> <span id="specFab"></span></li>
+                        <li><b>Modelo:</b> <span id="specMod"></span></li>
+                        <li><b>Estoque:</b> <span id="specQtd"></span> disponiveis</li>
+                    </ul>
+
+                    <button class="btn-contact" onclick="alert('Contato via chat em breve!')">Entre em contato conosco</button>
+                    
+                    <div id="adminOps" class="hidden" style="margin-top:20px; display:flex; gap:10px;">
+                        <button id="editBtn" style="flex:1; padding:8px; background:#f4f4f4; border:1px solid #ccc;">Editar</button>
+                        <button id="delBtn" style="flex:1; padding:8px; color:red; border:1px solid #ffbaba;">Excluir</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div style="margin-top:30px; border-top:1px solid #eee; padding-top:20px;">
+            <h3>Descrição</h3>
+            <div id="detDesc" class="desc-text"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const API = 'https://api-marketplace.recantoheroico.com';
+    let idEditando = null;
+    let cacheProdutos = [];
+    let fotosAtuais = [];
+    let fotoIndex = 0;
+
+    async function buscarProdutos() {
+        const res = await fetch(`${API}/produtos?busca=${document.getElementById('campoBusca').value}`);
+        cacheProdutos = await res.json();
+        const lista = document.getElementById('listaProdutos');
+        lista.innerHTML = '';
+        cacheProdutos.forEach(p => {
+            lista.innerHTML += `
+                <div class="product-item" onclick="mostrarDetalhes(${p.id})">
+                    <img src="${p.imagem}">
+                    <div class="product-info">
+                        <h2>${p.nome}</h2>
+                        <div class="price">R$ ${parseFloat(p.preco).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</div>
+                    </div>
+                </div>`;
+        });
+    }
+
+    function mostrarDetalhes(id) {
+        const p = cacheProdutos.find(x => x.id === id);
+        if(!p) return;
+        document.getElementById('listView').style.display = 'none';
+        document.getElementById('detailView').style.display = 'block';
+        window.scrollTo(0, 0);
+
+        fotosAtuais = [p.imagem];
+        if(p.imagem2) fotosAtuais.push(p.imagem2);
+        fotoIndex = 0;
+        atualizarFoto();
+
+        document.getElementById('detTitulo').innerText = p.nome;
+        document.getElementById('detEstado').innerText = p.estado;
+        document.getElementById('detPreco').innerText = `R$ ${parseFloat(p.preco).toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+        document.getElementById('detDesc').innerText = p.descricao;
+        document.getElementById('specFab').innerText = p.fabricante;
+        document.getElementById('specMod').innerText = p.modelo;
+        document.getElementById('specQtd').innerText = p.quantidade;
+
+        const token = localStorage.getItem('token');
+        if(token) {
+            document.getElementById('adminOps').classList.remove('hidden');
+            document.getElementById('editBtn').onclick = () => prepararEdicao(p);
+            document.getElementById('delBtn').onclick = () => excluirProduto(p.id);
+        }
+
+        // Mostrar/Esconder setas conforme qtd de fotos
+        document.getElementById('btnPrev').style.display = fotosAtuais.length > 1 ? 'block' : 'none';
+        document.getElementById('btnNext').style.display = fotosAtuais.length > 1 ? 'block' : 'none';
+    }
+
+    function atualizarFoto() { document.getElementById('detImg').src = fotosAtuais[fotoIndex]; }
+    document.getElementById('btnPrev').onclick = (e) => { e.stopPropagation(); fotoIndex = (fotoIndex - 1 + fotosAtuais.length) % fotosAtuais.length; atualizarFoto(); };
+    document.getElementById('btnNext').onclick = (e) => { e.stopPropagation(); fotoIndex = (fotoIndex + 1) % fotosAtuais.length; atualizarFoto(); };
+
+    function voltarParaLista() {
+        document.getElementById('detailView').style.display = 'none';
+        document.getElementById('listView').style.display = 'block';
+    }
+
+    // --- Admin ---
+    function processarFoto(input, target) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.src = e.target.result;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = 800; canvas.height = (img.height * 800) / img.width;
+                canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                document.getElementById(target).value = canvas.toDataURL('image/jpeg', 0.8);
+            };
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+
+    async function salvarProduto() {
+        const data = {
+            nome: document.getElementById('nome').value, fabricante: document.getElementById('fabricante').value,
+            modelo: document.getElementById('modelo').value, preco: document.getElementById('preco').value,
+            quantidade: document.getElementById('quantidade').value, estado: document.getElementById('estado').value,
+            imagem: document.getElementById('imagem').value, imagem2: document.getElementById('imagem2').value,
+            descricao: document.getElementById('descricao').value
+        };
+        const res = await fetch(idEditando ? `${API}/produtos/${idEditando}` : `${API}/produtos`, {
+            method: idEditando ? 'PUT' : 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+            body: JSON.stringify(data)
+        });
+        if(res.ok) { location.reload(); }
+    }
+
+    function prepararEdicao(p) {
+        idEditando = p.id; voltarParaLista();
+        document.getElementById('adminArea').style.display = 'block';
+        document.getElementById('nome').value = p.nome;
+        document.getElementById('fabricante').value = p.fabricante;
+        document.getElementById('modelo').value = p.modelo;
+        document.getElementById('preco').value = p.preco;
+        document.getElementById('quantidade').value = p.quantidade;
+        document.getElementById('estado').value = p.estado;
+        document.getElementById('descricao').value = p.descricao;
+        document.getElementById('imagem').value = p.imagem;
+        document.getElementById('imagem2').value = p.imagem2 || '';
+        window.scrollTo(0,0);
+    }
+
+    async function gerenciarSessao() {
+        if(localStorage.getItem('token')) { 
+            document.getElementById('adminArea').style.display = 'block'; 
+            window.scrollTo(0,0);
+            return; 
+        }
+        const u = prompt("Admin:"), s = prompt("Senha:");
+        if(!u || !s) return;
+        const res = await fetch(`${API}/login`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({usuario:u, senha:s}) });
+        if(res.ok) { 
+            const d = await res.json(); 
+            localStorage.setItem('token', d.token); 
+            // LOGIN AUTOMÁTICO: Abre o painel direto após logar
+            document.getElementById('adminArea').style.display = 'block';
+            document.getElementById('btnSair').classList.remove('hidden');
+            alert("Logado com sucesso!");
+        }
+    }
+
+    function logout() { localStorage.removeItem('token'); location.reload(); }
+    async function excluirProduto(id) { if(confirm("Excluir?")) { await fetch(`${API}/produtos/${id}`, { method: 'DELETE', headers: {'Authorization': `Bearer ${localStorage.getItem('token')}`} }); location.reload(); } }
+
+    if(localStorage.getItem('token')) { document.getElementById('btnSair').classList.remove('hidden'); }
+    buscarProdutos();
+</script>
+</body>
+</html>
