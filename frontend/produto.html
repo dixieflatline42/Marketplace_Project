@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Carregando Anúncio... | CLPTEC</title>
+    <style>
+        :root { --primary: #002e5d; --accent: #3483fa; --green: #00a650; --bg: #ebebeb; --white: #fff; --text: #333; }
+        * { box-sizing: border-box; }
+        body { font-family: 'Proxima Nova', sans-serif; background: var(--bg); margin: 0; color: var(--text); }
+        
+        header { background: var(--primary); padding: 12px 0; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        .header-wrap { max-width: 1100px; margin: 0 auto; padding: 0 15px; display: flex; align-items: center; }
+        .logo { color: white; cursor: pointer; display: flex; align-items: center; gap: 12px; text-decoration: none; }
+        .logo img { height: 38px; }
+        
+        .container { max-width: 1100px; margin: 20px auto; padding: 0 15px; }
+        .detail-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        
+        .grid-detail { display: flex; gap: 30px; }
+        .gallery { flex: 1; border: 1px solid #eee; border-radius: 4px; text-align: center; position: relative; min-height: 300px; display: flex; align-items: center; justify-content: center; background: #fff; }
+        .gallery img { max-width: 100%; max-height: 400px; object-fit: contain; }
+        
+        .info-panel { width: 350px; flex-shrink: 0; }
+        .btn-whats { background: var(--accent); color: white; width: 100%; padding: 15px; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 20px; }
+        
+        .btn-voltar { border: none; background: none; color: var(--accent); cursor: pointer; margin-bottom: 20px; font-weight: bold; font-size: 16px; display: flex; align-items: center; gap: 5px; text-decoration: none; }
+
+        @media (max-width: 700px) {
+            .grid-detail { flex-direction: column; }
+            .info-panel { width: 100%; }
+            .gallery { min-height: 250px; }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-wrap">
+        <a href="index.html" class="logo">
+            <img src="img/logo.png" onerror="this.style.display='none'">
+            <h1 style="font-size: 22px; margin: 0; font-weight: 700;">CLPTEC</h1>
+        </a>
+    </div>
+</header>
+
+<div class="container">
+    <div class="detail-card">
+        <a href="index.html" class="btn-voltar">← Voltar para a lista</a>
+        
+        <div class="grid-detail">
+            <div class="gallery">
+                <button onclick="mudarFoto(-1)" style="position:absolute; left:10px; background:rgba(255,255,255,0.9); border:1px solid #ccc; border-radius:50%; width:40px; height:40px; cursor:pointer; z-index:5;">❮</button>
+                <img id="detImg" src="https://via.placeholder.com/400?text=Carregando...">
+                <button onclick="mudarFoto(1)" style="position:absolute; right:10px; background:rgba(255,255,255,0.9); border:1px solid #ccc; border-radius:50%; width:40px; height:40px; cursor:pointer; z-index:5;">❯</button>
+            </div>
+            
+            <div class="info-panel">
+                <span id="detEstado" style="font-size:12px; color:#777; text-transform:uppercase; letter-spacing:1px;"></span>
+                <h1 id="detTitulo" style="font-size:24px; margin:10px 0; font-weight:500;">Carregando...</h1>
+                <div id="detPreco" style="font-size:32px; margin-bottom:20px; color: var(--text);"></div>
+                
+                <div style="background:#f9f9f9; padding:20px; border-radius:8px; font-size:15px; border:1px solid #eee;">
+                    <p style="margin:8px 0;"><strong>Marca:</strong> <span id="specFab">---</span></p>
+                    <p style="margin:8px 0;"><strong>Modelo:</strong> <span id="specMod">---</span></p>
+                    <p style="margin:8px 0;"><strong>Estoque:</strong> <span id="specQtd">---</span></p>
+                </div>
+                
+                <button class="btn-whats" onclick="contatoWhatsApp()">Solicitar Orçamento</button>
+            </div>
+        </div>
+
+        <div style="margin-top:40px; border-top:1px solid #eee; padding-top:25px;">
+            <h3 style="font-size:20px; margin-bottom:15px;">Descrição Técnica</h3>
+            <div id="detDesc" style="white-space: pre-wrap; color:#444; line-height:1.7; font-size:16px;"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Usa a origem atual como API (funciona local e no NAS)
+    const API = window.location.origin;
+    let fotosArr = [];
+    let fotoIndex = 0;
+    let produtoAtual = null;
+
+    async function carregarProduto() {
+        const params = new URLSearchParams(window.location.search);
+        const id = params.get('id');
+
+        if (!id) {
+            window.location.href = 'index.html';
+            return;
+        }
+
+        try {
+            // Chama a nova rota que criamos no server.js
+            const res = await fetch(`${API}/api/produtos/${id}`);
+            const p = await res.json();
+
+            if (p.erro) {
+                alert("Produto não encontrado!");
+                window.location.href = 'index.html';
+                return;
+            }
+
+            produtoAtual = p;
+
+            // --- ESSENCIAL PARA O GOOGLE ---
+            document.title = `${p.nome} | CLPTEC Marketplace`;
+
+            // Preenche os dados na tela
+            document.getElementById('detTitulo').innerText = p.nome;
+            document.getElementById('detPreco').innerText = `R$ ${parseFloat(p.preco).toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+            document.getElementById('detEstado').innerText = p.estado;
+            document.getElementById('specFab').innerText = p.fabricante;
+            document.getElementById('specMod').innerText = p.modelo;
+            document.getElementById('specQtd').innerText = p.quantidade + " un";
+            document.getElementById('detDesc').innerText = p.descricao || "Sem descrição técnica.";
+
+            // Galeria de Fotos
+            fotosArr = [p.imagem];
+            if (p.imagem2) fotosArr.push(p.imagem2);
+            document.getElementById('detImg').src = fotosArr[0];
+
+        } catch (err) {
+            console.error("Erro ao carregar:", err);
+            document.getElementById('detTitulo').innerText = "Erro ao carregar produto.";
+        }
+    }
+
+    function mudarFoto(dir) {
+        if (fotosArr.length <= 1) return;
+        fotoIndex = (fotoIndex + dir + fotosArr.length) % fotosArr.length;
+        document.getElementById('detImg').src = fotosArr[fotoIndex];
+    }
+
+    function contatoWhatsApp() {
+        if (!produtoAtual) return;
+        const tel = "5511997487820";
+        const msg = `Olá, tenho interesse no item: ${produtoAtual.nome} (Ref: ${produtoAtual.modelo})`;
+        window.open(`https://wa.me/${tel}?text=${encodeURIComponent(msg)}`);
+    }
+
+    carregarProduto();
+</script>
+</body>
+</html>

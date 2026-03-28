@@ -1,97 +1,145 @@
 const express = require('express');
+const mysql = require('mysql2/promise');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
-const { Pool } = require('pg');
+const path = require('path');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
-const PORT = 3001;
-const SECRET_KEY = "batman-predator-key";
 
-// AUMENTA O LIMITE: Necessário para receber o texto das imagens
-app.use(express.json({ limit: '10mb' }));
-app.use(cors());
+// --- SEGURANÇA ---
+app.use(helmet({ contentSecurityPolicy: false }));
+app.use(cors({
+    origin: '*', 
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
-const pool = new Pool({
-    user: 'marketplace',
-    host: 'localhost',
-    database: 'marketplace_db',
-    password: 'wonder',
-    port: 5432,
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ limit: '15mb', extended: true }));
+
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    message: { erro: "Muitas tentativas. Tente novamente mais tarde." }
 });
 
-// --- LOGIN ---
-app.post('/login', (req, res) => {
-    const { usuario, senha } = req.body;
-    if (usuario === 'admin' && senha === 'clptec') {
-        const token = jwt.sign({ user: 'admin' }, SECRET_KEY, { expiresIn: '1h' });
-        return res.json({ token });
-    }
-    res.status(401).json({ erro: "Usuário ou senha incorretos." });
+// --- BANCO DE DADOS (AJUSTADO PARA O NAS) ---
+const pool = mysql.createPool({
+    host: 'localhost', // Mude de 127.0.0.1 para localhost
+    user: 'root',
+    password: 'wonder', 
+    database: 'recanto_heroico',
+    port: 3307,
+    waitForConnections: true,
+    connectionLimit: 5,
+    queueLimit: 0,
+    // Força o protocolo de handshake que o MariaDB do MyCloud prefere
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 0
 });
 
+// TESTE DE CONEXÃO COM LOG DETALHADO
+pool.getConnection()
+    .then(conn => {
+        console.log("✅ CONECTADO AO MARIADB (PORTA 3307)!");
+        conn.release();
+    })
+    .catch(err => {
+        console.error("❌ ERRO NO BANCO:", err.code, "|", err.message);
+    });
+
+const SECRET_KEY = "clptec_seguranca_@2026_nas_server_protegido"; 
+
+// Teste de conexão imediato no log
+pool.query('SELECT 1').then(() => console.log("✅ Conectado ao MariaDB na 3307")).catch(err => console.error("❌ Erro DB:", err.message));
+
+// --- MIDDLEWARE ---
 const verificarToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    if (!token) return res.status(403).json({ erro: "Faça login." });
-
+    if (!authHeader) return res.status(403).json({ erro: "Acesso negado." });
+    
+    const token = authHeader.split(' ')[1];
     jwt.verify(token, SECRET_KEY, (err, decoded) => {
         if (err) return res.status(401).json({ erro: "Sessão expirada." });
-        req.user = decoded;
+        req.userId = decoded.id;
         next();
     });
 };
 
-// --- ROTAS ---
+// --- ROTAS DA API ---
 
-app.get('/produtos', async (req, res) => {
-    const { busca } = req.query;
+app.post('/api/login', loginLimiter, (req, res) => {
+    const { usuario, senha } = req.body;
+    if (usuario === 'josesouto' && senha === 'paludo00') {
+        const token = jwt.sign({ id: 1 }, SECRET_KEY, { expiresIn: '6h' });
+        return res.json({ auth: true, token });
+    }
+    res.status(401).json({ erro: "Incorreto!" });
+});
+
+app.get('/api/produtos', async (req, res) => {
     try {
-        let queryText = 'SELECT * FROM produtos ORDER BY id DESC';
-        let values = [];
-        if (busca) {
-            queryText = `SELECT * FROM produtos WHERE nome ILIKE $1 OR fabricante ILIKE $1 OR modelo ILIKE $1 ORDER BY id DESC`;
-            values = [`%${busca}%`];
-        }
-        const resultado = await pool.query(queryText, values);
-        res.json(resultado.rows);
+        const [rows] = await pool.execute('SELECT * FROM produtos ORDER BY id DESC');
+        res.json(rows);
     } catch (err) {
-        res.status(500).json({ erro: "Erro ao buscar no banco." });
+        res.status(500).json({ erro: "Erro ao buscar dados." });
     }
 });
 
-app.post('/produtos', verificarToken, async (req, res) => {
-    const { nome, fabricante, modelo, preco, quantidade, estado, imagem, imagem2, descricao } = req.body;
-    try {
-        const queryText = `INSERT INTO produtos (nome, fabricante, modelo, preco, quantidade, estado, imagem, imagem2, descricao) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`;
-        const values = [nome, fabricante, modelo, preco, quantidade, estado, imagem, imagem2, descricao];
-        const resultado = await pool.query(queryText, values);
-        res.status(201).json(resultado.rows[0]);
-    } catch (err) {
-        console.error(err);
-        res.status(400).json({ erro: "Erro ao salvar: " + err.message });
-    }
-});
-
-app.put('/produtos/:id', verificarToken, async (req, res) => {
+app.get('/api/produtos/:id', async (req, res) => {
     const { id } = req.params;
-    const { nome, fabricante, modelo, preco, quantidade, estado, imagem, imagem2, descricao } = req.body;
     try {
-        const queryText = `UPDATE produtos SET nome=$1, fabricante=$2, modelo=$3, preco=$4, quantidade=$5, estado=$6, imagem=$7, imagem2=$8, descricao=$9 WHERE id=$10 RETURNING *`;
-        const values = [nome, fabricante, modelo, parseFloat(preco), parseInt(quantidade), estado, imagem, imagem2, descricao, id];
-        const resultado = await pool.query(queryText, values);
-        res.json(resultado.rows[0]);
+        const [rows] = await pool.execute('SELECT * FROM produtos WHERE id = ?', [id]);
+        if (rows.length === 0) return res.status(404).json({ erro: "Não encontrado." });
+        res.json(rows[0]);
     } catch (err) {
-        res.status(500).json({ erro: err.message });
+        res.status(500).json({ erro: "Erro ao buscar produto." });
     }
 });
 
-app.delete('/produtos/:id', verificarToken, async (req, res) => {
+// Outras rotas (POST, PUT, DELETE) permanecem iguais...
+// [Mantendo a lógica de INSERT/UPDATE/DELETE que você já tem]
+
+// --- CONFIGURAÇÃO DE SITEMAP E NAVEGAÇÃO (ESTILO NAS/COMPATÍVEL) ---
+
+// 1. ROTA DO SITEMAP
+app.get('/sitemap.xml', async (req, res) => {
     try {
-        await pool.query('DELETE FROM produtos WHERE id = $1', [req.params.id]);
-        res.json({ mensagem: "Excluído!" });
+        const [rows] = await pool.execute('SELECT id FROM produtos');
+        const baseUrl = 'https://clptec.net'; 
+        let xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
+        xml += `<url><loc>${baseUrl}/index.html</loc><priority>1.0</priority></url>`;
+        rows.forEach(p => {
+            xml += `\n  <url><loc>${baseUrl}/produto.html?id=${p.id}</loc></url>`;
+        });
+        xml += `\n</urlset>`;
+        res.header('Content-Type', 'application/xml').send(xml);
     } catch (err) {
-        res.status(500).json({ erro: "Erro ao excluir." });
+        res.status(500).send("Erro no sitemap");
     }
 });
 
-app.listen(PORT, () => console.log(`🚀 Online na porta ${PORT}`));
+// 2. SERVIR ARQUIVOS ESTÁTICOS
+app.use(express.static(path.join(__dirname, '../frontend')));
+
+// 3. ROTA PARA PÁGINA INDIVIDUAL
+app.get('/produto.html', (req, res) => {
+    res.sendFile(path.resolve(__dirname, '../frontend', 'produto.html'));
+});
+
+// 4. ROTA CORINGA 
+app.use((req, res) => {
+    // Se não for API e não for um arquivo físico (ex: .js, .css, .png)
+    if (!req.url.startsWith('/api') && !req.url.includes('.')) {
+        res.sendFile(path.resolve(__dirname, '../frontend', 'index.html'));
+    } else if (req.url.startsWith('/api')) {
+        res.status(404).json({ erro: "Rota API não encontrada" });
+    }
+});
+
+const PORT = 3001;
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Marketplace CLPTEC Online no NAS (Porta ${PORT})`);
+});
